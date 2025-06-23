@@ -1,0 +1,19 @@
+{
+  "MLModelVersionStringKey" : "8.3.158",
+  "MLModelDescriptionKey" : "Ultralytics best model trained on \/Users\/devashishupadhyay\/Downloads\/HackByte_Dataset\/yolo_params.yaml",
+  "MLModelCreatorDefinedKey" : {
+    "stride" : "32",
+    "Confidence threshold" : "0.25",
+    "IoU threshold" : "0.7",
+    "docs" : "https:\/\/docs.ultralytics.com",
+    "task" : "detect",
+    "channels" : "3",
+    "imgsz" : "[128, 128]",
+    "date" : "2025-06-24T01:13:45.104957",
+    "batch" : "1",
+    "args" : "{'batch': 1, 'half': True, 'int8': False, 'nms': True}",
+    "names" : "{0: 'FireExtinguisher', 1: 'ToolBox', 2: 'OxygenTank'}"
+  },
+  "MLModelAuthorKey" : "Ultralytics",
+  "MLModelLicenseKey" : "AGPL-3.0 License (https:\/\/ultralytics.com\/license)"
+}

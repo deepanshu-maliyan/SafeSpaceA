@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 
 struct SimulationView: View {
     @EnvironmentObject var appState: AppState
@@ -6,6 +7,8 @@ struct SimulationView: View {
     @State private var selectedEnvironment: SimulationEnvironment = .normalStation
     @State private var lightingLevel: Double = 0.5
     @State private var occlusionLevel: Double = 0.0
+    @State private var isImagePickerPresented = false
+    @State private var photoPickerItem: PhotosPickerItem?
     
     var body: some View {
         NavigationStack {
@@ -30,27 +33,63 @@ struct SimulationView: View {
             .background(AppColors.background)
             .navigationTitle("Simulation Lab")
             .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    PhotosPicker(selection: $photoPickerItem, matching: .images) {
+                        Image(systemName: "photo")
+                            .foregroundColor(AppColors.text)
+                    }
+                    .onChange(of: photoPickerItem) { newValue in
+                        if let newValue {
+                            loadTransferable(from: newValue)
+                        }
+                    }
+                }
+            }
         }
     }
     
     private var simulationPreview: some View {
         VStack(spacing: 8) {
             ZStack {
-                // Display different environments based on selection
-                Rectangle()
-                    .fill(Color.black)
-                    .overlay(
-                        Image("simulation_\(selectedEnvironment == .normalStation ? "normal" : "dim")")
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .brightness(calculateBrightness())
-                            .overlay(
-                                Rectangle()
-                                    .fill(Color.black.opacity(occlusionLevel * 0.5))
-                            )
+                if let simulationImage = appState.simulationImage {
+                    // Display processed image
+                    Image(uiImage: simulationImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(height: 240)
+                        .cornerRadius(12)
+                } else if let capturedImage = appState.capturedImage {
+                    // Display captured image with adjustments
+                    let adjustedImage = appState.mlModelService.processImageWithEffects(
+                        capturedImage,
+                        lightingLevel: lightingLevel,
+                        occlusionLevel: occlusionLevel
                     )
-                    .frame(height: 240)
-                    .cornerRadius(12)
+                    Image(uiImage: adjustedImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(height: 240)
+                        .cornerRadius(12)
+                } else {
+                    // Display default placeholder
+                    Rectangle()
+                        .fill(Color.black)
+                        .overlay(
+                            VStack {
+                                Image(systemName: "camera.metering.none")
+                                    .font(.system(size: 48))
+                                    .foregroundColor(AppColors.secondaryText)
+                                
+                                Text("No image selected")
+                                    .font(.callout)
+                                    .foregroundColor(AppColors.secondaryText)
+                                    .padding(.top, 8)
+                            }
+                        )
+                        .frame(height: 240)
+                        .cornerRadius(12)
+                }
                 
                 // Status badge
                 VStack {
@@ -67,15 +106,14 @@ struct SimulationView: View {
                     Spacer()
                 }
                 
-                // Simulation overlay showing detected objects
-                if simulationActive {
-                    Image(systemName: "viewfinder")
-                        .font(.system(size: 80))
-                        .foregroundColor(AppColors.accent.opacity(0.2))
-                    
-                    Image(systemName: "square.dashed")
-                        .font(.system(size: 120))
-                        .foregroundColor(AppColors.accent.opacity(0.3))
+                // Processing indicator
+                if appState.mlModelService.isProcessing {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: AppColors.accent))
+                        .scaleEffect(1.5)
+                        .padding()
+                        .background(Color.black.opacity(0.7))
+                        .cornerRadius(10)
                 }
             }
             
@@ -119,6 +157,7 @@ struct SimulationView: View {
                 withAnimation {
                     if simulationActive {
                         simulationActive = false
+                        appState.simulationImage = nil
                     } else {
                         startSimulation()
                     }
@@ -132,6 +171,7 @@ struct SimulationView: View {
                     .background(simulationActive ? AppColors.secondaryAccent : AppColors.accent)
                     .cornerRadius(12)
             }
+            .disabled(appState.capturedImage == nil && appState.simulationImage == nil)
         }
     }
     
@@ -180,7 +220,7 @@ struct SimulationView: View {
                 
                 resultMetricRow(
                     title: "Objects Found",
-                    value: "\(calculateObjectsFound())/7",
+                    value: "\(appState.detectedObjects.count)",
                     icon: "cube.box",
                     color: AppColors.info
                 )
@@ -206,6 +246,12 @@ struct SimulationView: View {
             .padding()
             .background(AppColors.cardBackground)
             .cornerRadius(12)
+            
+            // Detected objects list
+            ObjectListView(
+                objects: appState.detectedObjects,
+                title: "Detected Objects"
+            )
         }
     }
     
@@ -233,6 +279,12 @@ struct SimulationView: View {
                 
                 Slider(value: value, in: 0...1)
                     .tint(color)
+                    .onChange(of: value.wrappedValue) { _ in
+                        // Update preview when slider changes
+                        if !simulationActive {
+                            updatePreview()
+                        }
+                    }
                 
                 Text(maxLabel)
                     .font(.caption2)
@@ -246,6 +298,11 @@ struct SimulationView: View {
             withAnimation {
                 selectedEnvironment = environment
                 adjustSettingsForEnvironment(environment)
+                
+                // Update preview with new settings
+                if !simulationActive {
+                    updatePreview()
+                }
             }
         }) {
             HStack {
@@ -293,7 +350,46 @@ struct SimulationView: View {
     
     private func startSimulation() {
         simulationActive = true
-        // In a real app, you would start the actual simulation process here
+        
+        if let capturedImage = appState.capturedImage {
+            // Run ML model on adjusted image
+            let adjustedImage = appState.mlModelService.processImageWithEffects(
+                capturedImage,
+                lightingLevel: lightingLevel,
+                occlusionLevel: occlusionLevel
+            )
+            
+            // Set this as temporary preview
+            appState.simulationImage = adjustedImage
+            
+            // Process with ML model
+            appState.mlModelService.processImage(adjustedImage) { 
+                // Update with actual detection results
+                appState.simulationImage = appState.mlModelService.processedImage
+            }
+        }
+    }
+    
+    private func updatePreview() {
+        appState.updatePreviewWithSettings()
+    }
+    
+    private func loadTransferable(from item: PhotosPickerItem) {
+        item.loadTransferable(type: Data.self) { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let data):
+                    if let data = data, let image = UIImage(data: data) {
+                        appState.capturedImage = image
+                        
+                        // Update preview with current settings
+                        updatePreview()
+                    }
+                case .failure(let error):
+                    print("Photo picker error: \(error)")
+                }
+            }
+        }
     }
     
     private func adjustSettingsForEnvironment(_ environment: SimulationEnvironment) {
@@ -314,6 +410,10 @@ struct SimulationView: View {
             lightingLevel = 0.2
             occlusionLevel = 0.2
         }
+        
+        // Make sure these values are synced with the app state
+        appState.simulationLighting = lightingLevel
+        appState.simulationOcclusion = occlusionLevel
     }
     
     private func calculateBrightness() -> Double {
@@ -321,6 +421,12 @@ struct SimulationView: View {
     }
     
     private func calculateAccuracy() -> Int {
+        // Use real detection confidence if available
+        if !appState.detectedObjects.isEmpty {
+            let avgConfidence = appState.detectedObjects.map { $0.confidence }.reduce(0, +) / Double(appState.detectedObjects.count)
+            return Int(avgConfidence * 100)
+        }
+        
         // Simulate accuracy based on lighting and occlusion
         let baseAccuracy: Double = 92
         let lightingImpact = (1.0 - lightingLevel) * 20
@@ -331,6 +437,11 @@ struct SimulationView: View {
     }
     
     private func calculateObjectsFound() -> Int {
+        // Use real detection count if available
+        if simulationActive && !appState.detectedObjects.isEmpty {
+            return appState.detectedObjects.count
+        }
+        
         // Simulate objects found based on lighting and occlusion
         let baseObjects = 7
         let lightingImpact = Int((1.0 - lightingLevel) * 3)
@@ -349,12 +460,8 @@ struct SimulationView: View {
     }
     
     private func calculateFailureRate() -> Int {
-        // Simulate failure rate based on lighting and occlusion
-        let baseRate = 5
-        let lightingImpact = Int((1.0 - lightingLevel) * 15)
-        let occlusionImpact = Int(occlusionLevel * 25)
-        
-        return baseRate + lightingImpact + occlusionImpact
+        // Calculate failure rate based on detection accuracy
+        return 100 - calculateAccuracy()
     }
     
     private func getAccuracyColor() -> Color {

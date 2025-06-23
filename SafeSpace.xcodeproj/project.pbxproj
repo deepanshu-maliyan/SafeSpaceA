@@ -10,9 +10,22 @@
 		F399EEA92E0921E0004AFCA8 /* SafeSpace.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SafeSpace.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		F399EEEF2E09FCD3004AFCA8 /* Exceptions for "SafeSpace" folder in "SafeSpace" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = F399EEA82E0921E0004AFCA8 /* SafeSpace */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		F399EEAB2E0921E0004AFCA8 /* SafeSpace */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				F399EEEF2E09FCD3004AFCA8 /* Exceptions for "SafeSpace" folder in "SafeSpace" target */,
+			);
 			path = SafeSpace;
 			sourceTree = "<group>";
 		};

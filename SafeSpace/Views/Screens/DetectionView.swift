@@ -1,30 +1,33 @@
 import SwiftUI
+import AVFoundation
 
 struct DetectionView: View {
     @EnvironmentObject var appState: AppState
-    @State private var cameraImage: Image? = Image("camera_placeholder")
+    @State private var cameraError: String?
     @State private var flashOn: Bool = false
     @State private var zoomLevel: Double = 1.0
+    @State private var isCameraInitialized: Bool = false
+    @State private var showingAlert = false
+    @State private var alertTitle = ""
+    @State private var alertMessage = ""
+    @State private var showingSettings = false
     
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
                 // Camera view
                 ZStack {
-                    // Camera preview
-                    cameraPreview
-                    
-                    // Detected objects overlay
-                    GeometryReader { geometry in
-                        ZStack {
-                            // Show bounding boxes for detected objects
-                            ForEach(appState.isDetecting ? DetectedObject.sampleObjects : []) { object in
-                                ObjectBoundingBoxView(
-                                    detectedObject: object,
-                                    parentSize: geometry.size
-                                )
-                            }
+                    if isCameraInitialized {
+                        // Camera preview when no image is captured
+                        if appState.capturedImage == nil {
+                            cameraPreview
+                        } else {
+                            // Show captured image with detections
+                            capturedImageView
                         }
+                    } else {
+                        // Setup camera view
+                        setupView
                     }
                     
                     // Status overlay
@@ -50,12 +53,32 @@ struct DetectionView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(action: {
-                        // Toggle settings panel
+                        // Reset and allow new capture
+                        appState.capturedImage = nil
+                        appState.processedImage = nil
                     }) {
-                        Image(systemName: "slider.horizontal.3")
-                            .foregroundColor(AppColors.text)
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .foregroundColor(appState.capturedImage != nil ? AppColors.text : AppColors.secondaryText)
                     }
+                    .disabled(appState.capturedImage == nil)
                 }
+            }
+            .onAppear {
+                if !isCameraInitialized {
+                    checkCameraPermission()
+                }
+            }
+            .alert(alertTitle, isPresented: $showingAlert) {
+                if appState.cameraService.authorizationStatus == .denied {
+                    Button("Open Settings", action: {
+                        openSettings()
+                    })
+                    Button("Cancel", role: .cancel) { }
+                } else {
+                    Button("OK", role: .cancel) { }
+                }
+            } message: {
+                Text(alertMessage)
             }
         }
     }
@@ -63,25 +86,13 @@ struct DetectionView: View {
     private var cameraPreview: some View {
         GeometryReader { geometry in
             ZStack {
-                if appState.isDetecting {
-                    cameraImage?
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
+                // Camera preview
+                if appState.isCameraSetup, appState.cameraService.session != nil {
+                    CameraPreviewView(cameraService: appState.cameraService)
                         .frame(width: geometry.size.width, height: geometry.size.height)
-                        .clipped()
                 } else {
                     Color.black
                         .frame(width: geometry.size.width, height: geometry.size.height)
-                    
-                    VStack(spacing: 16) {
-                        Image(systemName: "camera.metering.none")
-                            .font(.system(size: 48))
-                            .foregroundColor(AppColors.secondaryText)
-                        
-                        Text("Camera preview will appear here")
-                            .font(.callout)
-                            .foregroundColor(AppColors.secondaryText)
-                    }
                 }
                 
                 // Grid overlay
@@ -102,13 +113,111 @@ struct DetectionView: View {
         }
     }
     
+    private var capturedImageView: some View {
+        GeometryReader { geometry in
+            ZStack {
+                if let processedImage = appState.processedImage {
+                    Image(uiImage: processedImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: geometry.size.width, height: geometry.size.height)
+                        .clipped()
+                } else if let capturedImage = appState.capturedImage {
+                    Image(uiImage: capturedImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: geometry.size.width, height: geometry.size.height)
+                        .clipped()
+                    
+                    if appState.mlModelService.isProcessing {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: AppColors.accent))
+                            .scaleEffect(1.5)
+                            .padding()
+                            .background(Color.black.opacity(0.7))
+                            .cornerRadius(10)
+                    }
+                } else {
+                    Color.black
+                }
+            }
+        }
+    }
+    
+    private var setupView: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "camera.fill")
+                .font(.system(size: 48))
+                .foregroundColor(AppColors.secondaryText)
+            
+            Text(permissionStatusTitle)
+                .font(.headline)
+                .foregroundColor(AppColors.text)
+            
+            Text(permissionStatusMessage)
+                .font(.subheadline)
+                .foregroundColor(AppColors.secondaryText)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+            
+            Button(action: {
+                if appState.cameraService.authorizationStatus == .denied {
+                    openSettings()
+                } else {
+                    checkCameraPermission()
+                }
+            }) {
+                Text(appState.cameraService.authorizationStatus == .denied ? "Open Settings" : "Setup Camera")
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(AppColors.accent)
+                    .cornerRadius(12)
+            }
+            .padding(.horizontal)
+        }
+    }
+    
+    private var permissionStatusTitle: String {
+        switch appState.cameraService.authorizationStatus {
+        case .authorized:
+            return "Setting Up Camera"
+        case .denied:
+            return "Camera Access Denied"
+        case .restricted:
+            return "Camera Access Restricted"
+        case .notDetermined:
+            return "Camera Access Required"
+        @unknown default:
+            return "Camera Access Required"
+        }
+    }
+    
+    private var permissionStatusMessage: String {
+        switch appState.cameraService.authorizationStatus {
+        case .authorized:
+            return "Initializing camera for object detection"
+        case .denied:
+            return "SafeSpace needs camera access to detect objects. Please enable camera access in Settings."
+        case .restricted:
+            return "Camera access is restricted on this device."
+        case .notDetermined:
+            return "SafeSpace needs camera access to detect objects"
+        @unknown default:
+            return "SafeSpace needs camera access to detect objects"
+        }
+    }
+    
     private var detectionStatusBadge: some View {
         HStack(spacing: 8) {
             Circle()
                 .fill(appState.isDetecting ? AppColors.success : AppColors.secondaryAccent)
                 .frame(width: 8, height: 8)
             
-            Text(appState.isDetecting ? "Detecting" : "Detection Paused")
+            Text(appState.isDetecting ? 
+                 (appState.capturedImage == nil ? "Ready to Capture" : "Detection Complete") : 
+                 "Detection Paused")
                 .font(.caption)
                 .fontWeight(.medium)
                 .foregroundColor(AppColors.text)
@@ -132,7 +241,7 @@ struct DetectionView: View {
     private var cameraControls: some View {
         VStack(spacing: 24) {
             // Detection stats
-            if appState.isDetecting {
+            if appState.capturedImage != nil {
                 HStack(spacing: 20) {
                     VStack {
                         Text("\(appState.detectedObjects.count)")
@@ -182,7 +291,10 @@ struct DetectionView: View {
             // Camera buttons
             HStack(spacing: 24) {
                 Button(action: {
-                    flashOn.toggle()
+                    if appState.cameraService.isFlashAvailable {
+                        appState.toggleFlash()
+                        flashOn = appState.cameraService.flashMode != .off
+                    }
                 }) {
                     ZStack {
                         Circle()
@@ -194,33 +306,46 @@ struct DetectionView: View {
                             .foregroundColor(flashOn ? AppColors.warning : AppColors.secondaryText)
                     }
                 }
+                .disabled(!appState.cameraService.isFlashAvailable || appState.capturedImage != nil)
                 
                 Button(action: {
                     if appState.isDetecting {
-                        appState.stopDetection()
+                        // If we already have a captured image, stop detection
+                        if appState.capturedImage != nil {
+                            appState.stopDetection()
+                        } else {
+                            // Otherwise capture a photo
+                            appState.capturePhoto()
+                        }
                     } else {
                         appState.startDetection()
-                        
-                        // Simulate adding detected objects
-                        if appState.detectedObjects.isEmpty {
-                            for object in DetectedObject.sampleObjects {
-                                appState.addDetectedObject(object)
-                            }
-                        }
                     }
                 }) {
                     ZStack {
                         Circle()
-                            .fill(appState.isDetecting ? AppColors.secondaryAccent : AppColors.accent)
+                            .fill(appState.capturedImage != nil ? 
+                                  (appState.isDetecting ? AppColors.secondaryAccent : AppColors.accent) : 
+                                  (appState.isDetecting ? AppColors.accent : AppColors.cardBackground))
                             .frame(width: 70, height: 70)
                         
-                        Image(systemName: appState.isDetecting ? "stop.fill" : "camera.aperture")
+                        Image(systemName: appState.capturedImage != nil ? 
+                              (appState.isDetecting ? "stop.fill" : "play.fill") : 
+                              (appState.isDetecting ? "camera.aperture" : "camera"))
                             .font(.system(size: 30))
-                            .foregroundColor(.white)
+                            .foregroundColor(appState.isDetecting || appState.capturedImage != nil ? .white : AppColors.secondaryText)
                     }
                 }
+                .disabled(!isCameraInitialized)
                 
-                Button(action: {}) {
+                Button(action: {
+                    // Reset and allow new capture
+                    appState.capturedImage = nil
+                    appState.processedImage = nil
+                    
+                    if !appState.isDetecting {
+                        appState.startDetection()
+                    }
+                }) {
                     ZStack {
                         Circle()
                             .fill(AppColors.cardBackground)
@@ -228,13 +353,53 @@ struct DetectionView: View {
                         
                         Image(systemName: "arrow.triangle.2.circlepath")
                             .font(.system(size: 20))
-                            .foregroundColor(AppColors.secondaryText)
+                            .foregroundColor(appState.capturedImage != nil ? AppColors.text : AppColors.secondaryText)
                     }
                 }
+                .disabled(appState.capturedImage == nil)
             }
             .padding(.vertical)
         }
         .background(AppColors.background)
+    }
+    
+    private func checkCameraPermission() {
+        AVCaptureDevice.requestAccess(for: .video) { granted in
+            DispatchQueue.main.async {
+                if granted {
+                    self.setupCamera()
+                } else {
+                    self.alertTitle = "Camera Access Denied"
+                    self.alertMessage = "SafeSpace needs camera access to detect objects. Please enable it in Settings."
+                    self.showingAlert = true
+                }
+            }
+        }
+    }
+    
+    private func setupCamera() {
+        // Ensure we're on the main thread when setting up camera
+        DispatchQueue.main.async {
+            appState.setupCamera { success in
+                if success {
+                    self.isCameraInitialized = true
+                } else if let error = appState.cameraService.error {
+                    self.alertTitle = "Camera Error"
+                    self.alertMessage = error.errorDescription ?? "Unknown camera error"
+                    self.showingAlert = true
+                } else {
+                    self.alertTitle = "Camera Error"
+                    self.alertMessage = "Unknown camera error"
+                    self.showingAlert = true
+                }
+            }
+        }
+    }
+    
+    private func openSettings() {
+        if let settingsURL = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(settingsURL)
+        }
     }
 }
 
