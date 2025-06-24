@@ -3,35 +3,24 @@ import AVFoundation
 
 struct DetectionView: View {
     @EnvironmentObject var appState: AppState
-    @State private var permissionRequested = false
-    @State private var cameraAuthorized = false
+    @State private var flashOn = false
+    @State private var isCameraInitialized = false
     @State private var showingAlert = false
     @State private var alertMessage = ""
-    @State private var isCameraInitialized = false
-    @State private var flashOn = false
     
     var body: some View {
         NavigationStack {
             ZStack {
-                // Main content
-                if cameraAuthorized && isCameraInitialized {
-                    cameraView
-                } else {
-                    setupView
-                }
+                // Main camera view
+                cameraView
             }
             .navigationTitle("Detection")
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
-                // Check permission status on appear
-                checkCameraPermission()
+                // Initialize camera on appear
+                initializeCamera()
             }
             .alert("Camera Error", isPresented: $showingAlert) {
-                if !cameraAuthorized {
-                    Button("Open Settings") {
-                        openSettings()
-                    }
-                }
                 Button("OK", role: .cancel) { }
             } message: {
                 Text(alertMessage)
@@ -39,9 +28,9 @@ struct DetectionView: View {
         }
     }
     
-    // Camera view when permission is granted
+    // Camera view
     private var cameraView: some View {
-        VStack(spacing: 0) {
+        ZStack {
             // Camera preview area
             ZStack {
                 if appState.capturedImage == nil {
@@ -71,6 +60,54 @@ struct DetectionView: View {
                             }
                         }
                     }
+                    
+                    // Camera controls overlay
+                    VStack {
+                        // Top status bar
+                        HStack {
+                            statusBadge
+                            Spacer()
+                            
+                            Button(action: {
+                                flashOn.toggle()
+                                appState.cameraService.flashMode = flashOn ? .on : .off
+                            }) {
+                                Image(systemName: flashOn ? "bolt.fill" : "bolt.slash")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(.white)
+                                    .padding(12)
+                                    .background(Color.black.opacity(0.6))
+                                    .clipShape(Circle())
+                            }
+                            .disabled(!appState.cameraService.isFlashAvailable)
+                        }
+                        .padding()
+                        
+                        Spacer()
+                        
+                        // Bottom camera controls
+                        HStack {
+                            Spacer()
+                            
+                            // Capture button
+                            Button(action: {
+                                appState.capturePhoto()
+                            }) {
+                                ZStack {
+                                    Circle()
+                                        .fill(Color.white)
+                                        .frame(width: 70, height: 70)
+                                    
+                                    Circle()
+                                        .stroke(Color.white, lineWidth: 4)
+                                        .frame(width: 80, height: 80)
+                                }
+                            }
+                            
+                            Spacer()
+                        }
+                        .padding(.bottom, 100)
+                    }
                 } else {
                     // Captured image with detections
                     GeometryReader { geometry in
@@ -99,66 +136,132 @@ struct DetectionView: View {
                             }
                         }
                     }
-                }
-                
-                // Status overlay
-                VStack {
-                    HStack {
-                        statusBadge
-                        Spacer()
-                    }
-                    .padding()
                     
-                    Spacer()
+                    // Controls overlay for captured image
+                    VStack {
+                        // Top status bar
+                        HStack {
+                            statusBadge
+                            Spacer()
+                        }
+                        .padding()
+                        
+                        Spacer()
+                        
+                        // Detection results
+                        if !appState.detectedObjects.isEmpty {
+                            detectionResultsView
+                                .padding(.horizontal)
+                        }
+                        
+                        // Bottom controls for captured image
+                        HStack(spacing: 40) {
+                            // Retake button
+                            Button(action: {
+                                // Reset and allow new capture
+                                appState.capturedImage = nil
+                                appState.processedImage = nil
+                                appState.detectedObjects = []
+                                
+                                // Restart camera session
+                                if !appState.isDetecting {
+                                    appState.startDetection()
+                                }
+                            }) {
+                                VStack {
+                                    Image(systemName: "arrow.triangle.2.circlepath.camera")
+                                        .font(.system(size: 24))
+                                        .foregroundColor(.white)
+                                    
+                                    Text("Retake")
+                                        .font(.caption)
+                                        .foregroundColor(.white)
+                                }
+                                .padding()
+                                .background(Color.black.opacity(0.6))
+                                .cornerRadius(12)
+                            }
+                            
+                            // Use photo button
+                            Button(action: {
+                                // Process the image if not already processed
+                                if appState.processedImage == nil {
+                                    appState.processImage(appState.capturedImage!)
+                                }
+                            }) {
+                                VStack {
+                                    Image(systemName: "checkmark.circle")
+                                        .font(.system(size: 24))
+                                        .foregroundColor(.white)
+                                    
+                                    Text("Use Photo")
+                                        .font(.caption)
+                                        .foregroundColor(.white)
+                                }
+                                .padding()
+                                .background(AppColors.accent.opacity(0.8))
+                                .cornerRadius(12)
+                            }
+                        }
+                        .padding(.bottom, 100)
+                    }
                 }
             }
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.black)
-            
-            // Camera controls
-            cameraControls
         }
-        .background(AppColors.background)
+        .edgesIgnoringSafeArea(.bottom)
     }
     
-    // Setup view when waiting for permission
-    private var setupView: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "camera.fill")
-                .font(.system(size: 64))
-                .foregroundColor(AppColors.accent)
-            
-            Text("Camera Access Required")
-                .font(.title2)
-                .fontWeight(.bold)
-                .foregroundColor(AppColors.text)
-            
-            Text("SafeSpace needs camera access to detect objects in your space environment.")
-                .multilineTextAlignment(.center)
-                .foregroundColor(AppColors.secondaryText)
-                .padding(.horizontal)
-            
-            Button(action: {
-                if !permissionRequested {
-                    requestCameraPermission()
-                } else if !cameraAuthorized {
-                    openSettings()
+    // Detection results view
+    private var detectionResultsView: some View {
+        VStack(spacing: 16) {
+            HStack(spacing: 20) {
+                VStack {
+                    Text("\(appState.detectedObjects.count)")
+                        .font(.title)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                    
+                    Text("Detected")
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.8))
                 }
-            }) {
-                Text(permissionRequested && !cameraAuthorized ? "Open Settings" : "Allow Camera Access")
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background(AppColors.accent)
-                    .cornerRadius(12)
+                
+                Divider()
+                    .background(Color.white.opacity(0.5))
+                    .frame(height: 30)
+                
+                VStack {
+                    Text("\(Int(appState.detectionAccuracy * 100))%")
+                        .font(.title)
+                        .fontWeight(.bold)
+                        .foregroundColor(AppColors.success)
+                    
+                    Text("Accuracy")
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.8))
+                }
+                
+                Divider()
+                    .background(Color.white.opacity(0.5))
+                    .frame(height: 30)
+                
+                VStack {
+                    Text("35ms")
+                        .font(.title)
+                        .fontWeight(.bold)
+                        .foregroundColor(AppColors.accent)
+                    
+                    Text("Speed")
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.8))
+                }
             }
-            .padding(.horizontal, 40)
-            .padding(.top, 20)
+            .padding()
+            .background(Color.black.opacity(0.7))
+            .cornerRadius(12)
         }
-        .padding()
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(AppColors.background)
     }
     
     private var statusBadge: some View {
@@ -172,7 +275,7 @@ struct DetectionView: View {
                  "Detection Paused")
                 .font(.caption)
                 .fontWeight(.medium)
-                .foregroundColor(AppColors.text)
+                .foregroundColor(.white)
             
             if appState.isDetecting {
                 Text("YOLOv8")
@@ -190,200 +293,23 @@ struct DetectionView: View {
         .cornerRadius(20)
     }
     
-    private var cameraControls: some View {
-        VStack(spacing: 24) {
-            // Detection stats
-            if appState.capturedImage != nil {
-                HStack(spacing: 20) {
-                    VStack {
-                        Text("\(appState.detectedObjects.count)")
-                            .font(.title)
-                            .fontWeight(.bold)
-                            .foregroundColor(AppColors.text)
-                        
-                        Text("Detected")
-                            .font(.caption)
-                            .foregroundColor(AppColors.secondaryText)
-                    }
-                    
-                    Divider()
-                        .background(AppColors.secondaryText)
-                        .frame(height: 30)
-                    
-                    VStack {
-                        Text("\(Int(appState.detectionAccuracy * 100))%")
-                            .font(.title)
-                            .fontWeight(.bold)
-                            .foregroundColor(AppColors.success)
-                        
-                        Text("Accuracy")
-                            .font(.caption)
-                            .foregroundColor(AppColors.secondaryText)
-                    }
-                    
-                    Divider()
-                        .background(AppColors.secondaryText)
-                        .frame(height: 30)
-                    
-                    VStack {
-                        Text("35ms")
-                            .font(.title)
-                            .fontWeight(.bold)
-                            .foregroundColor(AppColors.accent)
-                        
-                        Text("Speed")
-                            .font(.caption)
-                            .foregroundColor(AppColors.secondaryText)
-                    }
-                }
-                .padding()
-                .background(AppColors.cardBackground)
-            }
-            
-            // Camera buttons
-            HStack(spacing: 24) {
-                Button(action: {
-                    appState.toggleFlash()
-                    flashOn = appState.cameraService.flashMode != .off
-                }) {
-                    ZStack {
-                        Circle()
-                            .fill(AppColors.cardBackground)
-                            .frame(width: 50, height: 50)
-                        
-                        Image(systemName: flashOn ? "bolt.fill" : "bolt.slash.fill")
-                            .font(.system(size: 20))
-                            .foregroundColor(flashOn ? AppColors.warning : AppColors.secondaryText)
-                    }
-                }
-                .disabled(!appState.cameraService.isFlashAvailable || appState.capturedImage != nil)
-                
-                Button(action: {
-                    if appState.isDetecting {
-                        // If we already have a captured image, stop detection
-                        if appState.capturedImage != nil {
-                            appState.stopDetection()
-                        } else {
-                            // Otherwise capture a photo
-                            appState.capturePhoto()
-                        }
-                    } else {
-                        appState.startDetection()
-                    }
-                }) {
-                    ZStack {
-                        Circle()
-                            .fill(appState.capturedImage != nil ? 
-                                  (appState.isDetecting ? AppColors.secondaryAccent : AppColors.accent) : 
-                                  (appState.isDetecting ? AppColors.accent : AppColors.cardBackground))
-                            .frame(width: 70, height: 70)
-                        
-                        Image(systemName: appState.capturedImage != nil ? 
-                              (appState.isDetecting ? "stop.fill" : "play.fill") : 
-                              (appState.isDetecting ? "camera.aperture" : "camera"))
-                            .font(.system(size: 30))
-                            .foregroundColor(appState.isDetecting || appState.capturedImage != nil ? .white : AppColors.secondaryText)
-                    }
-                }
-                
-                Button(action: {
-                    // Reset and allow new capture
-                    appState.capturedImage = nil
-                    appState.processedImage = nil
-                    
-                    if !appState.isDetecting {
-                        appState.startDetection()
-                    }
-                }) {
-                    ZStack {
-                        Circle()
-                            .fill(AppColors.cardBackground)
-                            .frame(width: 50, height: 50)
-                        
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                            .font(.system(size: 20))
-                            .foregroundColor(appState.capturedImage != nil ? AppColors.text : AppColors.secondaryText)
-                    }
-                }
-                .disabled(appState.capturedImage == nil)
-            }
-            .padding(.vertical)
-        }
-        .background(AppColors.background)
-    }
-    
-    // Check current camera permission status
-    private func checkCameraPermission() {
-        let status = AVCaptureDevice.authorizationStatus(for: .video)
-        
-        switch status {
-        case .authorized:
-            cameraAuthorized = true
-            initializeCamera()
-        case .denied, .restricted:
-            cameraAuthorized = false
-            permissionRequested = true
-            alertMessage = "Camera access has been denied. Please enable it in Settings."
-            showingAlert = true
-        case .notDetermined:
-            cameraAuthorized = false
-            // Will request permission
-        @unknown default:
-            cameraAuthorized = false
-        }
-    }
-    
-    // Request camera permission
-    private func requestCameraPermission() {
-        permissionRequested = true
-        
-        // Use main actor to ensure UI updates happen on main thread
-        Task { @MainActor in
-            let granted = await withCheckedContinuation { continuation in
-                AVCaptureDevice.requestAccess(for: .video) { granted in
-                    continuation.resume(returning: granted)
-                }
-            }
-            
+    // Initialize camera
+    private func initializeCamera() {
+        AVCaptureDevice.requestAccess(for: .video) { granted in
             if granted {
                 DispatchQueue.main.async {
-                        cameraAuthorized = true
-                        initializeCamera()
+                    appState.setupCamera { success in
+                        if success {
+                            self.isCameraInitialized = true
+                            self.appState.startDetection()
+                        } else {
+                            self.alertMessage = "Failed to initialize camera. Please try again."
+                            self.showingAlert = true
+                        }
                     }
-            } else {
-                cameraAuthorized = false
-                alertMessage = "Camera access has been denied. Please enable it in Settings."
-                showingAlert = true
+                }
             }
         }
-    }
-    
-    // Initialize camera after permission is granted
-    private func initializeCamera() {
-        guard AVCaptureDevice.authorizationStatus(for: .video) == .authorized else {
-            alertMessage = "Camera access not granted."
-            showingAlert = true
-            return
-        }
-
-        appState.setupCamera { success in
-            if success {
-                self.isCameraInitialized = true
-                self.appState.startDetection()
-            } else {
-                self.alertMessage = "Failed to initialize camera. Please try again."
-                self.showingAlert = true
-            }
-        }
-    }
-
-    // Open app settings
-    private func openSettings() {
-        guard let settingsUrl = URL(string: UIApplication.openSettingsURLString) else {
-            return
-        }
-        
-        UIApplication.shared.open(settingsUrl)
     }
 }
 
