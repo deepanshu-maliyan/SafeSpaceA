@@ -36,6 +36,37 @@ The current implementation is trained on the Falcon synthetic dataset and can de
 - Fast inference time (typically under 50ms)
 - Specialized in detecting safety equipment in space habitats
 
+### Model Performance
+The optimized YOLOv8m model was trained on the HackByte_DataSet (Falcon synthetic dataset) specifically for space station environments. Below are the performance metrics:
+
+#### Confusion Matrix
+The confusion matrix shows the model's classification accuracy across the three object classes:
+
+<div align="center">
+  <img src="SafeSpace/Assets.xcassets/confusion_matrix.imageset/confusion_matrix.png" width="70%" />
+</div>
+
+#### Precision-Recall Curve
+The PR curve demonstrates the balance between precision and recall across different confidence thresholds:
+
+<div align="center">
+  <img src="SafeSpace/Assets.xcassets/PR_curve.imageset/PR_curve.png" width="70%" />
+</div>
+
+#### Training Results
+The results graph shows the model's performance metrics during training, including mAP (mean Average Precision), precision, and recall:
+
+<div align="center">
+  <img src="SafeSpace/Assets.xcassets/results.imageset/results.png" width="70%" />
+</div>
+
+Key performance indicators:
+- mAP@50-95: 0.87
+- Precision: 0.93
+- Recall: 0.91
+- F1-Score: 0.92
+- Inference Time: ~35ms on iPhone 13 and newer
+
 ### iOS Technologies Used
 - SwiftUI for modern, responsive UI
 - AVFoundation for camera handling
@@ -82,6 +113,7 @@ The current implementation is trained on the Falcon synthetic dataset and can de
 
 ## Acknowledgments
 - YOLOv8 developed by Ultralytics
+- HackByte_DataSet (Falcon synthetic dataset) for space station environments
 - [Any other acknowledgments]
 
 ## Screenshots
