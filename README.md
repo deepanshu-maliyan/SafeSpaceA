@@ -109,7 +109,7 @@ Key performance indicators:
 6. Double-tap to reset zoom level
 
 ## License
-[Specify your license here]
+[MIT]
 
 ## Acknowledgments
 - YOLOv8 developed by Ultralytics
