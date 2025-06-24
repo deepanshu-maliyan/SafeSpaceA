@@ -43,7 +43,7 @@ The optimized YOLOv8m model was trained on the HackByte_DataSet (Falcon syntheti
 The confusion matrix shows the model's classification accuracy across the three object classes:
 
 <div align="center">
-  <img src="SafeSpace/Assets.xcassets/confusion_matrix.imageset/confusion_matrix.png" width="70%" />
+  <img src="SafeSpace/Assets.xcassets/confusion_matrix.imageset/confusion_matrix_normalized.png" width="70%" />
 </div>
 
 #### Precision-Recall Curve
