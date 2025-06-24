@@ -61,11 +61,10 @@ The results graph shows the model's performance metrics during training, includi
 </div>
 
 Key performance indicators:
-- mAP@50: 0.827(all classes)
-- Precision: 0.734
-- Recall: 0.820
-- F1-Score: 0.860
-- Inference Time: ~35ms on iPhone 13 and newer
+- mAP@50: 0.812(all classes)
+- Precision: 1.00 at 0.952(all classes)
+- Recall: 0.85 at 0.000(all classes)
+- F1-Score: 0.810 at 0.344(all classes)
 
 ### iOS Technologies Used
 - SwiftUI for modern, responsive UI
