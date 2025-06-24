@@ -1,15 +1,15 @@
 {
   "MLModelVersionStringKey" : "8.3.158",
-  "MLModelDescriptionKey" : "Ultralytics best model trained on \/Users\/devashishupadhyay\/Downloads\/HackByte_Dataset\/yolo_params.yaml",
+  "MLModelDescriptionKey" : "Ultralytics best model trained on c:\\Users\\Devashish Upadhyay\\Desktop\\HackByte_Dataset\\yolo_params.yaml",
   "MLModelCreatorDefinedKey" : {
     "stride" : "32",
     "Confidence threshold" : "0.25",
     "IoU threshold" : "0.7",
-    "docs" : "https:\/\/docs.ultralytics.com",
-    "task" : "detect",
     "channels" : "3",
+    "task" : "detect",
+    "docs" : "https:\/\/docs.ultralytics.com",
     "imgsz" : "[128, 128]",
-    "date" : "2025-06-24T01:13:45.104957",
+    "date" : "2025-06-25T00:11:31.159835",
     "batch" : "1",
     "args" : "{'batch': 1, 'half': True, 'int8': False, 'nms': True}",
     "names" : "{0: 'FireExtinguisher', 1: 'ToolBox', 2: 'OxygenTank'}"
