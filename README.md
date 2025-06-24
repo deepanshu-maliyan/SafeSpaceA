@@ -15,23 +15,17 @@ The current implementation is trained on the Falcon synthetic dataset and can de
 - Real-time processing and feedback
 - Detection metrics including accuracy and processing time
 
-![Camera Detection Interface](SafeSpace/Assets.xcassets/screen1.imageset/screen1.png)
-
 ### Simulation Laboratory
 - Test object detection in simulated space environments
 - Adjustable lighting and occlusion conditions
 - Multiple environment presets (Normal Station, Dim Lighting, Emergency Lighting, etc.)
 - Interactive zoom functionality for detailed analysis
 
-![Simulation Lab Interface](SafeSpace/Assets.xcassets/screen2.imageset/screen2.png)
-
 ### Detailed Analysis
 - Comprehensive detection results with confidence scores
 - Performance metrics for detection accuracy
 - List of detected objects with classification
 - Classification of fire extinguishers, toolboxes, and oxygen tanks with confidence scores
-
-![Detection Results View](SafeSpace/Assets.xcassets/screen3.imageset/screen3.png)
 
 ## Technical Details
 
@@ -75,8 +69,6 @@ The current implementation is trained on the Falcon synthetic dataset and can de
 4. Tap the capture button to analyze the current frame
 5. Review detected objects and their confidence scores
 
-![Object Detection Flow](SafeSpace/Assets.xcassets/screen4.imageset/screen4.png)
-
 ### Simulation Lab
 1. Navigate to the Simulation tab
 2. Upload an image using the photo picker or use a previously captured image
@@ -84,8 +76,6 @@ The current implementation is trained on the Falcon synthetic dataset and can de
 4. Press "Start Simulation" to run the detection model
 5. Pinch to zoom in/out on the results for detailed inspection
 6. Double-tap to reset zoom level
-
-![Simulation Workflow](SafeSpace/Assets.xcassets/screen5.imageset/screen5.png)
 
 ## License
 [Specify your license here]
@@ -96,6 +86,22 @@ The current implementation is trained on the Falcon synthetic dataset and can de
 
 ## Screenshots
 
-Here are additional screenshots of the application in use:
+<div align="center">
+  <p float="left">
+    <img src="SafeSpace/Assets.xcassets/screen1.imageset/screen1.png" width="45%" />
+    <img src="SafeSpace/Assets.xcassets/screen2.imageset/screen2.png" width="45%" />
+  </p>
+  <p>Camera Detection Interface (left) and Simulation Lab (right)</p>
 
-![Additional Screenshot](SafeSpace/Assets.xcassets/screen6.imageset/screen6.png) 
+  <p float="left">
+    <img src="SafeSpace/Assets.xcassets/screen3.imageset/screen3.png" width="45%" />
+    <img src="SafeSpace/Assets.xcassets/screen4.imageset/screen4.png" width="45%" />
+  </p>
+  <p>Detection Results (left) and Object Detection Flow (right)</p>
+
+  <p float="left">
+    <img src="SafeSpace/Assets.xcassets/screen5.imageset/screen5.png" width="45%" />
+    <img src="SafeSpace/Assets.xcassets/screen6.imageset/screen6.png" width="45%" />
+  </p>
+  <p>Simulation Workflow (left) and Additional View (right)</p>
+</div> 
