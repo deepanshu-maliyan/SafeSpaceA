@@ -1,7 +1,7 @@
 {
   "images" : [
     {
-      "filename" : "confusion_matrix.png",
+      "filename" : "confusion_matrix_normalized.png",
       "idiom" : "universal",
       "scale" : "1x"
     },
