@@ -83,12 +83,13 @@ Key performance indicators:
    ```
    git clone https://github.com/yourusername/SafeSpace.git
    ```
-2. Open the project in Xcode
+2. Install dependencies.
+   
+3. Open the project in Xcode
    ```
    cd SafeSpace
    open SafeSpace.xcodeproj
    ```
-3. Install dependencies (if any)
 4. Build and run on a physical device for full functionality
 
 ## Usage
@@ -114,7 +115,6 @@ Key performance indicators:
 ## Acknowledgments
 - YOLOv8 developed by Ultralytics
 - HackByte_DataSet (Falcon synthetic dataset) for space station environments
-- [Any other acknowledgments]
 
 ## Screenshots
 
