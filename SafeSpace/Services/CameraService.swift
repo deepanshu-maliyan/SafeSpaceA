@@ -10,82 +10,49 @@ class CameraService: NSObject, ObservableObject {
     @Published var error: CameraError?
     @Published var flashMode: AVCaptureDevice.FlashMode = .off
     @Published var isFlashAvailable = true
-    @Published var authorizationStatus: AVAuthorizationStatus = .notDetermined
     
     var session: AVCaptureSession?
     var delegate: AVCapturePhotoCaptureDelegate?
     let output = AVCapturePhotoOutput()
     let previewLayer = AVCaptureVideoPreviewLayer()
     
-    override init() {
-        super.init()
-        // Check initial authorization status
-        authorizationStatus = AVCaptureDevice.authorizationStatus(for: .video)
-    }
-    
-    // Setup and configuration
+    // Setup camera - assumes permission is already granted
     func setup(completion: @escaping (Bool) -> Void) {
-        checkPermissions { [weak self] hasPermission in
-            guard let self = self else { return }
-            if hasPermission {
-                self.setupCamera { success in
-                    DispatchQueue.main.async {
-                        self.isCameraReady = success
-                        completion(success)
-                    }
-                }
-            } else {
-                DispatchQueue.main.async {
-                    self.error = .deniedAuthorization
-                    completion(false)
-                }
+        // Make sure we're authorized before proceeding
+        let authStatus = AVCaptureDevice.authorizationStatus(for: .video)
+        guard authStatus == .authorized else {
+            DispatchQueue.main.async {
+                self.error = (authStatus == .denied) ? .deniedAuthorization : .restrictedAuthorization
+                completion(false)
             }
+            return
         }
-    }
-    
-    func checkPermissions(completion: @escaping (Bool) -> Void) {
-        // Update the current status
-        self.authorizationStatus = AVCaptureDevice.authorizationStatus(for: .video)
+
         
-        switch self.authorizationStatus {
-        case .authorized:
-            completion(true)
-        case .notDetermined:
-            AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
-                DispatchQueue.main.async {
-                    self?.authorizationStatus = granted ? .authorized : .denied
-                    completion(granted)
-                }
-            }
-        case .denied, .restricted:
-            completion(false)
-        @unknown default:
-            completion(false)
-        }
-    }
-    
-    func setupCamera(completion: @escaping (Bool) -> Void) {
-        // Ensure we're on a background thread for camera setup
+        // Create a new session on a background thread
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else {
                 DispatchQueue.main.async { completion(false) }
                 return
             }
             
-            // Create a new session
+            // Create session
             let session = AVCaptureSession()
-            session.beginConfiguration()
-            
-            // Check for camera device
-            guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
-                DispatchQueue.main.async {
-                    self.error = .cameraUnavailable
-                    completion(false)
-                }
-                return
-            }
             
             do {
+                // Configure the session
+                session.beginConfiguration()
+                
+                // Get camera device
+                guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
+                    DispatchQueue.main.async {
+                        self.error = .cameraUnavailable
+                        completion(false)
+                    }
+                    return
+                }
+                
+                // Create device input
                 let input = try AVCaptureDeviceInput(device: device)
                 
                 if session.canAddInput(input) {
@@ -96,27 +63,30 @@ class CameraService: NSObject, ObservableObject {
                     session.addOutput(self.output)
                 }
                 
+                // Commit configuration
                 session.commitConfiguration()
                 
+                // Configure preview layer
                 self.previewLayer.session = session
                 self.previewLayer.videoGravity = .resizeAspectFill
                 
                 // Check if flash is available
                 self.isFlashAvailable = device.hasFlash
                 
+                // Store session
                 self.session = session
                 
-                // Start the session on a background thread
-                DispatchQueue.global(qos: .userInitiated).async {
-                    session.startRunning()
-                    DispatchQueue.main.async {
-                        completion(true)
-                    }
+                // Start session on background thread
+                session.startRunning()
+                
+                DispatchQueue.main.async {
+                    self.isCameraReady = true
+                    completion(true)
                 }
                 
             } catch {
-                print("Failed to setup camera: \(error.localizedDescription)")
                 DispatchQueue.main.async {
+                    print("Camera setup error: \(error.localizedDescription)")
                     self.error = .cameraUnavailable
                     completion(false)
                 }
@@ -125,6 +95,7 @@ class CameraService: NSObject, ObservableObject {
     }
     
     func capturePhoto() {
+        // Make sure we have a valid session
         guard let session = session, session.isRunning else {
             error = .captureError
             return
@@ -137,16 +108,20 @@ class CameraService: NSObject, ObservableObject {
             photoSettings.flashMode = flashMode
         }
         
+        // Create delegate to handle photo capture
         self.delegate = PhotoCaptureDelegate { [weak self] image in
-            guard let image = image else {
+            guard let self = self, let image = image else {
                 self?.error = .captureError
                 return
             }
+            
+            // Update on main thread
             DispatchQueue.main.async {
-                self?.capturedImage = image
+                self.capturedImage = image
             }
         }
         
+        // Capture photo
         if let delegate = self.delegate as? PhotoCaptureDelegate {
             output.capturePhoto(with: photoSettings, delegate: delegate)
         }
@@ -168,12 +143,19 @@ class CameraService: NSObject, ObservableObject {
     }
     
     func stopSession() {
+        // Stop session on background thread
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             self?.session?.stopRunning()
         }
     }
     
     func resumeSession() {
+        // Make sure we're authorized
+        guard AVCaptureDevice.authorizationStatus(for: .video) == .authorized else {
+            return
+        }
+        
+        // Resume session on background thread
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             self?.session?.startRunning()
         }
@@ -213,8 +195,8 @@ struct CameraPreviewView: UIViewRepresentable {
     func makeUIView(context: Context) -> UIView {
         let view = UIView(frame: UIScreen.main.bounds)
         
-        // Only add the preview layer if the session exists
-        if cameraService.session != nil {
+        // Only add the preview layer if the session exists and is running
+        if let session = cameraService.session, session.isRunning {
             cameraService.previewLayer.frame = view.bounds
             view.layer.addSublayer(cameraService.previewLayer)
         }
@@ -223,6 +205,7 @@ struct CameraPreviewView: UIViewRepresentable {
     }
     
     func updateUIView(_ uiView: UIView, context: Context) {
+        // Update frame on bounds change
         cameraService.previewLayer.frame = uiView.bounds
     }
 }

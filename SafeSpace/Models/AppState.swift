@@ -64,7 +64,8 @@ class AppState: ObservableObject {
     func setupCamera(completion: @escaping (Bool) -> Void) {
         if !isCameraSetup {
             cameraService.setup { [weak self] success in
-                self?.isCameraSetup = success
+                guard let self = self else { return }
+                self.isCameraSetup = success
                 completion(success)
             }
         } else {
