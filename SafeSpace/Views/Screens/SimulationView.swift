@@ -53,12 +53,14 @@ struct SimulationView: View {
         VStack(spacing: 8) {
             ZStack {
                 if let simulationImage = appState.simulationImage {
-                    // Display processed image
-                    Image(uiImage: simulationImage)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
+                    // Display processed image with zoom capability
+                    ZoomableImageView(image: simulationImage)
                         .frame(height: 240)
                         .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                        )
                 } else if let capturedImage = appState.capturedImage {
                     // Display captured image with adjustments
                     let adjustedImage = appState.mlModelService.processImageWithEffects(
@@ -483,6 +485,75 @@ struct SimulationView: View {
             return AppColors.warning
         } else {
             return AppColors.secondaryAccent
+        }
+    }
+}
+
+// Zoomable Image View
+struct ZoomableImageView: View {
+    let image: UIImage
+    
+    @State private var currentScale: CGFloat = 1.0
+    @State private var finalScale: CGFloat = 1.0
+    @State private var currentOffset: CGSize = .zero
+    @State private var finalOffset: CGSize = .zero
+    
+    var body: some View {
+        GeometryReader { geometry in
+            Image(uiImage: image)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .scaleEffect(currentScale)
+                .offset(x: self.currentOffset.width, y: self.currentOffset.height)
+                .gesture(
+                    MagnificationGesture()
+                        .onChanged { value in
+                            self.currentScale = max(1.0, self.finalScale * value.magnitude)
+                        }
+                        .onEnded { value in
+                            self.finalScale = self.currentScale
+                        }
+                )
+                .gesture(
+                    DragGesture()
+                        .onChanged { value in
+                            if self.currentScale > 1.0 {
+                                self.currentOffset = CGSize(
+                                    width: self.finalOffset.width + value.translation.width,
+                                    height: self.finalOffset.height + value.translation.height
+                                )
+                            }
+                        }
+                        .onEnded { value in
+                            if self.currentScale > 1.0 {
+                                self.finalOffset = self.currentOffset
+                            }
+                        }
+                )
+                .onTapGesture(count: 2) {
+                    withAnimation(.spring()) {
+                        self.currentScale = 1.0
+                        self.finalScale = 1.0
+                        self.currentOffset = .zero
+                        self.finalOffset = .zero
+                    }
+                }
+                .overlay(
+                    Group {
+                        if currentScale > 1.0 {
+                            VStack {
+                                Spacer()
+                                Text("Double-tap to reset zoom")
+                                    .font(.caption2)
+                                    .foregroundColor(.white)
+                                    .padding(6)
+                                    .background(Color.black.opacity(0.6))
+                                    .cornerRadius(8)
+                                    .padding(.bottom, 4)
+                            }
+                        }
+                    }
+                )
         }
     }
 }
